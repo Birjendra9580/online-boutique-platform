@@ -1,0 +1,251 @@
+name: Build and Push Selected Images
+
+run-name: Build Images - ${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: "Build and push ALL 11 images"
+        required: true
+        type: boolean
+        default: false
+
+      build_adservice:
+        description: "Build adservice"
+        type: boolean
+        default: false
+      tag_adservice:
+        description: "Tag for adservice"
+        type: string
+        default: "v1.0.0"
+
+      build_cartservice:
+        description: "Build cartservice"
+        type: boolean
+        default: false
+      tag_cartservice:
+        description: "Tag for cartservice"
+        type: string
+        default: "v1.0.0"
+
+      build_checkoutservice:
+        description: "Build checkoutservice"
+        type: boolean
+        default: false
+      tag_checkoutservice:
+        description: "Tag for checkoutservice"
+        type: string
+        default: "v1.0.0"
+
+      build_currencyservice:
+        description: "Build currencyservice"
+        type: boolean
+        default: false
+      tag_currencyservice:
+        description: "Tag for currencyservice"
+        type: string
+        default: "v1.0.0"
+
+      build_emailservice:
+        description: "Build emailservice"
+        type: boolean
+        default: false
+      tag_emailservice:
+        description: "Tag for emailservice"
+        type: string
+        default: "v1.0.0"
+
+      build_frontend:
+        description: "Build frontend"
+        type: boolean
+        default: false
+      tag_frontend:
+        description: "Tag for frontend"
+        type: string
+        default: "v1.0.0"
+
+      build_loadgenerator:
+        description: "Build loadgenerator"
+        type: boolean
+        default: false
+      tag_loadgenerator:
+        description: "Tag for loadgenerator"
+        type: string
+        default: "v1.0.0"
+
+      build_paymentservice:
+        description: "Build paymentservice"
+        type: boolean
+        default: false
+      tag_paymentservice:
+        description: "Tag for paymentservice"
+        type: string
+        default: "v1.0.0"
+
+      build_productcatalogservice:
+        description: "Build productcatalogservice"
+        type: boolean
+        default: false
+      tag_productcatalogservice:
+        description: "Tag for productcatalogservice"
+        type: string
+        default: "v1.0.0"
+
+      build_recommendationservice:
+        description: "Build recommendationservice"
+        type: boolean
+        default: false
+      tag_recommendationservice:
+        description: "Tag for recommendationservice"
+        type: string
+        default: "v1.0.0"
+
+      build_shippingservice:
+        description: "Build shippingservice"
+        type: boolean
+        default: false
+      tag_shippingservice:
+        description: "Tag for shippingservice"
+        type: string
+        default: "v1.0.0"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-push:
+    name: Build and Push Selected Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout application source
+        uses: actions/checkout@v4
+        with:
+          ref: application
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - name: Build and push selected images
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          BUILD_ALL: ${{ inputs.build_all }}
+
+          BUILD_ADSERVICE: ${{ inputs.build_adservice }}
+          TAG_ADSERVICE: ${{ inputs.tag_adservice }}
+
+          BUILD_CARTSERVICE: ${{ inputs.build_cartservice }}
+          TAG_CARTSERVICE: ${{ inputs.tag_cartservice }}
+
+          BUILD_CHECKOUTSERVICE: ${{ inputs.build_checkoutservice }}
+          TAG_CHECKOUTSERVICE: ${{ inputs.tag_checkoutservice }}
+
+          BUILD_CURRENCYSERVICE: ${{ inputs.build_currencyservice }}
+          TAG_CURRENCYSERVICE: ${{ inputs.tag_currencyservice }}
+
+          BUILD_EMAILSERVICE: ${{ inputs.build_emailservice }}
+          TAG_EMAILSERVICE: ${{ inputs.tag_emailservice }}
+
+          BUILD_FRONTEND: ${{ inputs.build_frontend }}
+          TAG_FRONTEND: ${{ inputs.tag_frontend }}
+
+          BUILD_LOADGENERATOR: ${{ inputs.build_loadgenerator }}
+          TAG_LOADGENERATOR: ${{ inputs.tag_loadgenerator }}
+
+          BUILD_PAYMENTSERVICE: ${{ inputs.build_paymentservice }}
+          TAG_PAYMENTSERVICE: ${{ inputs.tag_paymentservice }}
+
+          BUILD_PRODUCTCATALOGSERVICE: ${{ inputs.build_productcatalogservice }}
+          TAG_PRODUCTCATALOGSERVICE: ${{ inputs.tag_productcatalogservice }}
+
+          BUILD_RECOMMENDATIONSERVICE: ${{ inputs.build_recommendationservice }}
+          TAG_RECOMMENDATIONSERVICE: ${{ inputs.tag_recommendationservice }}
+
+          BUILD_SHIPPINGSERVICE: ${{ inputs.build_shippingservice }}
+          TAG_SHIPPINGSERVICE: ${{ inputs.tag_shippingservice }}
+
+        run: |
+          set -euo pipefail
+
+          services=(
+            adservice
+            cartservice
+            checkoutservice
+            currencyservice
+            emailservice
+            frontend
+            loadgenerator
+            paymentservice
+            productcatalogservice
+            recommendationservice
+            shippingservice
+          )
+
+          selected=0
+
+          for service in "${services[@]}"; do
+            service_upper="${service^^}"
+
+            build_var="BUILD_${service_upper}"
+            tag_var="TAG_${service_upper}"
+
+            should_build="${!build_var}"
+            image_tag="${!tag_var}"
+
+            if [[ "$BUILD_ALL" == "true" ]]; then
+              should_build="true"
+            fi
+
+            if [[ "$should_build" != "true" ]]; then
+              continue
+            fi
+
+            if [[ ! "$image_tag" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+              echo "ERROR: Invalid Docker tag for ${service}: ${image_tag}"
+              exit 1
+            fi
+
+            dockerfile="src/${service}/Dockerfile"
+
+            if [[ ! -f "$dockerfile" ]]; then
+              echo "ERROR: Dockerfile not found: ${dockerfile}"
+              exit 1
+            fi
+
+            image_uri="asia-south1-docker.pkg.dev/${PROJECT_ID}/${service}/${service}:${image_tag}"
+
+            echo "=========================================="
+            echo "Building: ${image_uri}"
+            echo "Dockerfile: ${dockerfile}"
+            echo "=========================================="
+
+            docker build \
+              --file "$dockerfile" \
+              --tag "$image_uri" \
+              .
+
+            docker push "$image_uri"
+
+            selected=$((selected + 1))
+          done
+
+          if [[ "$selected" -eq 0 ]]; then
+            echo "ERROR: Select Build All Images or at least one service."
+            exit 1
+          fi
+
+          echo "Successfully built and pushed ${selected} image(s)."
