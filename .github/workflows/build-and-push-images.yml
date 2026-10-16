@@ -1,10 +1,16 @@
 name: Build and Push Selected Images
 
-run-name: Build Images - ${{ github.actor }}
+run-name: Build Images - ${{ inputs.source_branch }} - ${{ github.actor }}
 
 on:
   workflow_dispatch:
     inputs:
+      source_branch:
+        description: "Branch containing application source code"
+        required: true
+        type: string
+        default: "application"
+
       build_all:
         description: "Build and push ALL 11 images"
         required: true
@@ -97,8 +103,8 @@ on:
         type: boolean
         default: false
       tag_recommendationservice:
-        description: "Tag for recommendationservice"
         type: string
+        description: "Tag for recommendationservice"
         default: "v1.0.0"
 
       build_shippingservice:
@@ -120,10 +126,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate source branch
+        env:
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SOURCE_BRANCH" ]]; then
+            echo "ERROR: Source branch cannot be empty."
+            exit 1
+          fi
+
+          if [[ "$SOURCE_BRANCH" == -* ]]; then
+            echo "ERROR: Invalid source branch name."
+            exit 1
+          fi
+
+          echo "Selected source branch: $SOURCE_BRANCH"
+
       - name: Checkout application source
         uses: actions/checkout@v4
         with:
-          ref: application
+          ref: ${{ inputs.source_branch }}
+          persist-credentials: false
+
+      - name: Verify selected services
+        shell: bash
+        env:
+          BUILD_ALL: ${{ inputs.build_all }}
+          BUILD_ADSERVICE: ${{ inputs.build_adservice }}
+          BUILD_CARTSERVICE: ${{ inputs.build_cartservice }}
+          BUILD_CHECKOUTSERVICE: ${{ inputs.build_checkoutservice }}
+          BUILD_CURRENCYSERVICE: ${{ inputs.build_currencyservice }}
+          BUILD_EMAILSERVICE: ${{ inputs.build_emailservice }}
+          BUILD_FRONTEND: ${{ inputs.build_frontend }}
+          BUILD_LOADGENERATOR: ${{ inputs.build_loadgenerator }}
+          BUILD_PAYMENTSERVICE: ${{ inputs.build_paymentservice }}
+          BUILD_PRODUCTCATALOGSERVICE: ${{ inputs.build_productcatalogservice }}
+          BUILD_RECOMMENDATIONSERVICE: ${{ inputs.build_recommendationservice }}
+          BUILD_SHIPPINGSERVICE: ${{ inputs.build_shippingservice }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BUILD_ALL" != "true" ]] &&
+             [[ "$BUILD_ADSERVICE" != "true" ]] &&
+             [[ "$BUILD_CARTSERVICE" != "true" ]] &&
+             [[ "$BUILD_CHECKOUTSERVICE" != "true" ]] &&
+             [[ "$BUILD_CURRENCYSERVICE" != "true" ]] &&
+             [[ "$BUILD_EMAILSERVICE" != "true" ]] &&
+             [[ "$BUILD_FRONTEND" != "true" ]] &&
+             [[ "$BUILD_LOADGENERATOR" != "true" ]] &&
+             [[ "$BUILD_PAYMENTSERVICE" != "true" ]] &&
+             [[ "$BUILD_PRODUCTCATALOGSERVICE" != "true" ]] &&
+             [[ "$BUILD_RECOMMENDATIONSERVICE" != "true" ]] &&
+             [[ "$BUILD_SHIPPINGSERVICE" != "true" ]]; then
+            echo "ERROR: Select Build All Images or at least one service."
+            exit 1
+          fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -199,7 +259,6 @@ jobs:
 
           for service in "${services[@]}"; do
             service_upper="${service^^}"
-
             build_var="BUILD_${service_upper}"
             tag_var="TAG_${service_upper}"
 
@@ -220,6 +279,7 @@ jobs:
             fi
 
             dockerfile="src/${service}/Dockerfile"
+            build_context="src/${service}"
 
             if [[ ! -f "$dockerfile" ]]; then
               echo "ERROR: Dockerfile not found: ${dockerfile}"
@@ -231,21 +291,17 @@ jobs:
             echo "=========================================="
             echo "Building: ${image_uri}"
             echo "Dockerfile: ${dockerfile}"
+            echo "Build context: ${build_context}"
             echo "=========================================="
 
             docker build \
               --file "$dockerfile" \
               --tag "$image_uri" \
-              .
+              "$build_context"
 
             docker push "$image_uri"
 
             selected=$((selected + 1))
           done
-
-          if [[ "$selected" -eq 0 ]]; then
-            echo "ERROR: Select Build All Images or at least one service."
-            exit 1
-          fi
 
           echo "Successfully built and pushed ${selected} image(s)."
