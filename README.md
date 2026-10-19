@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!-- <p align="center">
 <img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
 </p> -->
@@ -168,3 +169,7 @@ Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
 - [Google Cloud Next'18 London – Keynote](https://youtu.be/nIq2pkNcfEI?t=3071)
   showing Stackdriver Incident Response Management
 - [Microservices demo showcasing Go Micro](https://github.com/go-micro/demo)
+=======
+# online-boutique-platform
+End-to-end Online Boutique platform containing Terraform infrastructure, application source code, Docker build configurations, and Kubernetes deployment manifests for GCP and GKE.
+>>>>>>> myrepo/main
